@@ -1,0 +1,8 @@
+# Heavy optional dependencies — lazy-imported at runtime; every consumer has a
+# CPU-cheap fallback path so the agent still runs (degraded) without them.
+sentence-transformers>=3.0   # Stage 0 embedding classifier (falls back to keyword heuristic)
+spacy>=3.8                   # Stage 1 NER tool (falls back to Stage 2/3)
+# python -m spacy download en_core_web_sm
+
+# Phase 2 only (not implemented until Phase 1 produces logs)
+lightgbm>=4.5

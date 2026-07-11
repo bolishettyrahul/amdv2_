@@ -1,0 +1,9 @@
+[project]
+name = "amd-routing-agent"
+version = "0.1.0"
+description = "Hybrid token-efficient LLM routing agent (AMD Developer Cloud competition)"
+requires-python = ">=3.13"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
