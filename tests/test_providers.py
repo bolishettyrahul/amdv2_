@@ -6,6 +6,7 @@ from router.providers.base import ChatResponse, LLMProvider, ProviderError
 from router.providers.fireworks import FireworksProvider
 from router.providers.groq import GroqProvider
 from router.providers.ollama import OllamaProvider
+from router.providers.openrouter import OpenRouterProvider
 
 
 def ok_response(text="hello", tokens_in=10, tokens_out=5):
@@ -36,7 +37,7 @@ def test_chat_sends_openai_payload_and_parses_usage():
     assert seen["payload"]["messages"][0]["content"] == "Capital of France?"
 
 
-def test_groq_and_ollama_base_urls():
+def test_groq_ollama_openrouter_base_urls():
     urls = []
 
     def transport(url, headers, payload):
@@ -45,8 +46,10 @@ def test_groq_and_ollama_base_urls():
 
     GroqProvider(api_key="k", transport=transport).chat([], model="m")
     OllamaProvider(transport=transport).chat([], model="qwen2.5:7b")
+    OpenRouterProvider(api_key="k", transport=transport).chat([], model="m")
     assert urls[0] == "https://api.groq.com/openai/v1/chat/completions"
     assert urls[1] == "http://localhost:11434/v1/chat/completions"
+    assert urls[2] == "https://openrouter.ai/api/v1/chat/completions"
 
 
 def test_retries_on_429_then_succeeds():
