@@ -1,0 +1,9 @@
+.git
+.venv
+__pycache__
+tests/
+plan/
+.claude/
+fixtures/
+*.pyc
+.pytest_cache
