@@ -3,7 +3,7 @@
 from router.config import Settings
 from router.factory import build_pipeline
 from router.pipeline import Pipeline
-from router.stage3 import M8
+from router.stage3 import OSS120
 
 
 def ok_transport(log):
@@ -49,7 +49,15 @@ def test_unreachable_ollama_flips_to_cloud_fallback(tmp_path):
     p = build_pipeline(settings(tmp_path, use_cloud_fallback=None), transport=transport)
     assert p.stage2.paid is True
     assert p.stage2.provider.name == "groq"  # default paid provider during testing
-    assert set(p.stage2.models.values()) == {M8}  # ultra-cheap tier serves as Stage 2
+    assert set(p.stage2.models.values()) == {OSS120}  # ultra-cheap tier serves as Stage 2
+
+
+def test_cloud_fallback_stage2_respects_allowed_models(tmp_path):
+    allowed = ["accounts/fireworks/models/some-harness-model"]
+    p = build_pipeline(settings(tmp_path, use_cloud_fallback=True, allowed_models=allowed),
+                       transport=ok_transport([]))
+    assert set(p.stage2.models.values()) == set(allowed)
+    assert p.stage3.allowed_models == allowed
 
 
 def test_paid_provider_selection_and_stage3_retry_wiring(tmp_path):

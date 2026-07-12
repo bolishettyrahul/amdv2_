@@ -64,6 +64,9 @@ class Pipeline:
             "cost_usd": sum(r.cost_usd for r in attempts),
             "latency_s": round(time.perf_counter() - started, 3),
         }
+        if any(getattr(r, "allowed_models_fallback", False) for r in attempts):
+            # Warning, not silent: the ALLOWED_MODELS last-resort fallback fired.
+            record["allowed_models_fallback"] = True
         self.logger.append(record)
         return record
 

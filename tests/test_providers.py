@@ -37,6 +37,16 @@ def test_chat_sends_openai_payload_and_parses_usage():
     assert seen["payload"]["messages"][0]["content"] == "Capital of France?"
 
 
+def test_fireworks_base_url_from_env_with_fallback(monkeypatch):
+    monkeypatch.delenv("FIREWORKS_BASE_URL", raising=False)
+    assert FireworksProvider().base_url == "https://api.fireworks.ai/inference/v1"
+
+    monkeypatch.setenv("FIREWORKS_BASE_URL", "https://proxy.example/v1")
+    assert FireworksProvider().base_url == "https://proxy.example/v1"
+    # An explicit constructor argument (threaded from Settings) wins.
+    assert FireworksProvider(base_url="https://arg.example/v1").base_url == "https://arg.example/v1"
+
+
 def test_groq_ollama_openrouter_base_urls():
     urls = []
 

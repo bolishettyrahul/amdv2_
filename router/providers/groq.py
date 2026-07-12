@@ -1,6 +1,13 @@
 from router.providers.base import ChatResponse, OpenAICompatProvider
 
 _GROQ_MAPPINGS = {
+    # Live Fireworks catalog -> closest Groq test-time stand-in.
+    "accounts/fireworks/models/gpt-oss-120b": "openai/gpt-oss-120b",
+    "accounts/fireworks/models/kimi-k2p6": "moonshotai/kimi-k2-instruct",
+    "accounts/fireworks/models/glm-5p1": "llama-3.3-70b-versatile",
+    "accounts/fireworks/models/glm-5p2": "llama-3.3-70b-versatile",
+    "accounts/fireworks/models/deepseek-v4-pro": "llama-3.3-70b-versatile",
+    # Retired Fireworks catalog generation.
     "accounts/fireworks/models/llama-v3p1-8b-instruct": "llama-3.1-8b-instant",
     "accounts/fireworks/models/gemma2-9b-it": "gemma2-9b-it",
     "accounts/fireworks/models/gemma2-27b-it": "llama-3.3-70b-versatile",

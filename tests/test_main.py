@@ -90,10 +90,15 @@ def test_main_sums_cost_and_counts_errors_from_the_batch(tmp_path, capsys):
     assert "0.0025" in out or "0.002" in out
 
 
-def test_main_requires_input_and_output(tmp_path):
-    import pytest
+def test_zero_args_default_to_harness_mounts():
+    # The grading harness runs the container with no CLI arguments.
+    args = main_mod._parse_args([])
+    assert args.input == "/input/tasks.json"
+    assert args.output == "/output/results.json"
 
-    with pytest.raises(SystemExit):
-        main_mod.main(["--input", "only-input.jsonl"],
-                      load_settings=lambda: Settings(),
-                      pipeline_builder=lambda s: StubPipeline(lambda t: {}))
+
+def test_cli_paths_remain_overridable_for_local_runs():
+    args = main_mod._parse_args(["--input", "fixtures/sample_tasks.jsonl",
+                                 "--output", "out.jsonl"])
+    assert args.input == "fixtures/sample_tasks.jsonl"
+    assert args.output == "out.jsonl"

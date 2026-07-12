@@ -25,8 +25,9 @@ RUN ollama serve & \
 COPY router/ /app/router/
 COPY scripts/ /app/scripts/
 
-# Make the entrypoint script executable
-RUN chmod +x /app/scripts/entrypoint.sh
+# Normalize line endings (a Windows checkout would inject \r and break bash)
+# and make the entrypoint script executable
+RUN sed -i 's/\r$//' /app/scripts/entrypoint.sh && chmod +x /app/scripts/entrypoint.sh
 
 # Set the default entrypoint to run the entrypoint script
 ENTRYPOINT ["/bin/bash", "/app/scripts/entrypoint.sh"]

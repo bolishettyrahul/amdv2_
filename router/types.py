@@ -48,3 +48,6 @@ class StageResult:
     tokens_in: int = 0
     tokens_out: int = 0
     cost_usd: float = 0.0
+    # True when the ALLOWED_MODELS last-resort fallback picked the model
+    # (nothing in ROUTING/ESCALATION for the domain was allowed).
+    allowed_models_fallback: bool = False

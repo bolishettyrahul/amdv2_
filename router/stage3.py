@@ -10,6 +10,7 @@ returns an answer, verified or not.
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 
 from router.cost import CostTracker
 from router.domain_verify import verify_domain_answer
@@ -18,29 +19,31 @@ from router.types import Domain, StageResult, Task
 
 STAGE = "stage3_paid"
 
-M8 = "accounts/fireworks/models/llama-v3p1-8b-instruct"
-G9 = "accounts/fireworks/models/gemma2-9b-it"
-G27 = "accounts/fireworks/models/gemma2-27b-it"
-L70 = "accounts/fireworks/models/llama-v3p1-70b-instruct"
-Q72 = "accounts/fireworks/models/qwen2p5-72b-instruct"
-L405 = "accounts/fireworks/models/llama-v3p1-405b-instruct"
-MAVERICK = "accounts/fireworks/models/llama4-maverick-instruct-basic"
+# Live Fireworks serverless catalog (verified 2026-07 against GET /v1/models —
+# the entire llama/gemma/qwen generation was retired). Standard-tier prices
+# per 1M tokens (in/out) from docs.fireworks.ai/serverless/pricing:
+OSS120 = "accounts/fireworks/models/gpt-oss-120b"    # $0.15/$0.60 — cheap tier
+KIMI = "accounts/fireworks/models/kimi-k2p6"         # $0.95/$4.00 — mid reasoning
+GLM51 = "accounts/fireworks/models/glm-5p1"          # $1.40/$4.40
+GLM52 = "accounts/fireworks/models/glm-5p2"          # $1.40/$4.40 — strong coder
+DSV4 = "accounts/fireworks/models/deepseek-v4-pro"   # $1.74/$3.48 — apex
 
 ROUTING: dict[Domain, dict[str, str]] = {
-    Domain.FACTUAL: {"simple": G9, "complex": L70},
-    Domain.MATH: {"simple": G9, "complex": Q72},
-    Domain.SENTIMENT: {"simple": M8, "complex": M8},
-    Domain.SUMMARIZATION: {"simple": M8, "complex": L70},
-    Domain.NER: {"simple": M8, "complex": M8},
-    Domain.CODE_DEBUG: {"simple": M8, "complex": L70},
-    Domain.LOGIC: {"simple": G27, "complex": L70},
-    Domain.CODE_GEN: {"simple": M8, "complex": Q72},
+    Domain.FACTUAL: {"simple": OSS120, "complex": KIMI},
+    Domain.MATH: {"simple": OSS120, "complex": KIMI},
+    Domain.SENTIMENT: {"simple": OSS120, "complex": OSS120},
+    # Summarization is input-heavy, so the cheap-input mid tier wins there.
+    Domain.SUMMARIZATION: {"simple": OSS120, "complex": KIMI},
+    Domain.NER: {"simple": OSS120, "complex": OSS120},
+    Domain.CODE_DEBUG: {"simple": OSS120, "complex": GLM52},
+    Domain.LOGIC: {"simple": OSS120, "complex": KIMI},
+    Domain.CODE_GEN: {"simple": OSS120, "complex": GLM52},
 }
 
 # Self-correction escalation ladder: where to go when the routed model keeps
-# failing the verification gate. Use the highly cost-effective 400B MAVERICK
-# model instead of the expensive L405.
-ESCALATION: dict[str, str] = {M8: L70, G9: L70, G27: L70, Q72: MAVERICK, L70: MAVERICK, L405: MAVERICK, MAVERICK: MAVERICK}
+# failing the verification gate. DSV4 is the apex — cheapest output $/M among
+# the frontier tier, which matters because retries carry long outputs.
+ESCALATION: dict[str, str] = {OSS120: KIMI, KIMI: DSV4, GLM51: GLM52, GLM52: DSV4, DSV4: DSV4}
 
 _COMPLEX_CUES = re.compile(
     r"\bprove\b|\bproof\b|\bcompare\b|\bmulti-?hop\b|\bconcurrenc|\bthread|\barchitect"
@@ -63,6 +66,29 @@ def choose_model(domain: Domain, complexity: str) -> str:
     return ROUTING[domain][complexity]
 
 
+def resolve_model(domain: Domain, complexity: str,
+                  allowed: Sequence[str]) -> tuple[str, bool]:
+    """Constrain the routed model to the harness allowlist.
+
+    Empty `allowed` means no restriction (local dev). Otherwise fall back in
+    order: routed model -> the domain's other complexity tier -> the routed
+    model's escalation target -> the first allowed model as a flagged last
+    resort. Returns (model, last_resort_fallback_used).
+    """
+    routed = choose_model(domain, complexity)
+    if not allowed:
+        return routed, False
+    allowed_set = set(allowed)
+    if routed in allowed_set:
+        return routed, False
+    other_tier = ROUTING[domain]["complex" if complexity == "simple" else "simple"]
+    if other_tier in allowed_set:
+        return other_tier, False
+    if ESCALATION.get(routed) in allowed_set:
+        return ESCALATION[routed], False
+    return allowed[0], True
+
+
 _SYSTEM_PROMPTS: dict[Domain, str] = {
     Domain.FACTUAL: "Answer the question directly and concisely.",
     Domain.MATH: ("Solve the problem. Rewrite it as a single arithmetic expression or "
@@ -83,14 +109,23 @@ _WEAK_DOMAINS = (Domain.FACTUAL, Domain.LOGIC)
 
 class Stage3Paid:
     def __init__(self, provider: LLMProvider, cost_tracker: CostTracker | None = None,
-                 max_attempts: int = 3, sandbox_timeout: float = 2.0):
+                 max_attempts: int = 3, sandbox_timeout: float = 2.0,
+                 allowed_models: Sequence[str] | None = None):
         self.provider = provider
         self.cost_tracker = cost_tracker or CostTracker()
         self.max_attempts = max_attempts
         self.sandbox_timeout = sandbox_timeout
+        self.allowed_models = list(allowed_models or [])
+
+    def _escalation_target(self, model: str) -> str:
+        target = ESCALATION.get(model, model)
+        if self.allowed_models and target not in self.allowed_models:
+            return model  # stronger model not allowed: stay on the allowed one
+        return target
 
     def attempt(self, task: Task, domain: Domain) -> StageResult:
-        routed = choose_model(domain, estimate_complexity(task, domain))
+        routed, allowed_fallback = resolve_model(
+            domain, estimate_complexity(task, domain), self.allowed_models)
         messages = [
             {"role": "system", "content": _SYSTEM_PROMPTS[domain]},
             {"role": "user", "content": self._user_content(task, domain)},
@@ -103,13 +138,18 @@ class Stage3Paid:
 
         for attempt_idx in range(self.max_attempts):
             if attempt_idx == self.max_attempts - 1:
-                model = ESCALATION[routed]  # last try: stronger model
+                model = self._escalation_target(routed)  # last try: stronger model
             resp = self.provider.chat(messages, model=model, temperature=0.0)
-            rec = self.cost_tracker.record(model, tokens_in=resp.tokens_in,
-                                           tokens_out=resp.tokens_out)
             tokens_in += resp.tokens_in
             tokens_out += resp.tokens_out
-            cost += rec.cost_usd
+            try:
+                rec = self.cost_tracker.record(model, tokens_in=resp.tokens_in,
+                                               tokens_out=resp.tokens_out)
+                cost += rec.cost_usd
+            except KeyError:
+                # Allowlisted model outside our price table: an unknown price
+                # must not sink the task; tokens are still counted above.
+                pass
 
             answer, verified, verifier, reason = verify_domain_answer(
                 task, domain, [resp.text], sandbox_timeout=self.sandbox_timeout)
@@ -127,7 +167,8 @@ class Stage3Paid:
 
         return StageResult(answer, STAGE, verified=verified, verifier=verifier,
                            verifier_reason=reason, model=model,
-                           tokens_in=tokens_in, tokens_out=tokens_out, cost_usd=cost)
+                           tokens_in=tokens_in, tokens_out=tokens_out, cost_usd=cost,
+                           allowed_models_fallback=allowed_fallback)
 
     @staticmethod
     def _user_content(task: Task, domain: Domain) -> str:

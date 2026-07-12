@@ -4,7 +4,12 @@ Pure wiring: parse args, load Settings, build the Phase 1 pipeline via the
 factory, run the batch, print the summary. No routing decisions live here —
 those all belong to the pipeline stages.
 
-    python -m router.main --input tasks.jsonl --output results.jsonl
+The grading harness runs the container with ZERO arguments, mounting the
+dataset at /input and collecting /output, so both paths default to the
+harness contract and stay overridable for local runs:
+
+    python -m router.main                                       # harness mode
+    python -m router.main --input tasks.jsonl --output out.jsonl  # local mode
 """
 
 from __future__ import annotations
@@ -23,10 +28,12 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         prog="router",
         description="Run the token-efficient LLM routing agent over a batch dataset.",
     )
-    parser.add_argument("--input", required=True,
-                        help="Path to the input dataset (JSONL or CSV).")
-    parser.add_argument("--output", required=True,
-                        help="Path to write the results JSONL.")
+    parser.add_argument("--input", default="/input/tasks.json",
+                        help="Path to the input dataset (JSONL or CSV). "
+                             "Defaults to the grading-harness mount.")
+    parser.add_argument("--output", default="/output/results.json",
+                        help="Path to write the results JSONL. "
+                             "Defaults to the grading-harness mount.")
     return parser.parse_args(argv)
 
 

@@ -42,7 +42,8 @@ def run_batch(pipeline, in_path: str | Path, out_path: str | Path) -> dict:
             try:
                 record = pipeline.process(task)
                 result = {"task_id": task.task_id, "answer": record.get("answer") or "",
-                          **{k: record[k] for k in ("stage", "verified", "cost_usd")
+                          **{k: record[k] for k in ("stage", "verified", "cost_usd",
+                                                    "allowed_models_fallback")
                              if k in record}}
                 total_cost += record.get("cost_usd", 0.0)
             except Exception as exc:  # one bad task must not sink the whole run

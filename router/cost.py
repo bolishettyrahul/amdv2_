@@ -13,6 +13,13 @@ from dataclasses import dataclass, field
 
 # model id -> (usd per 1M input tokens, usd per 1M output tokens)
 PRICE_TABLE: dict[str, tuple[float, float]] = {
+    # Live serverless catalog (docs.fireworks.ai/serverless/pricing, 2026-07).
+    "accounts/fireworks/models/gpt-oss-120b": (0.15, 0.60),
+    "accounts/fireworks/models/kimi-k2p6": (0.95, 4.00),
+    "accounts/fireworks/models/glm-5p1": (1.40, 4.40),
+    "accounts/fireworks/models/glm-5p2": (1.40, 4.40),
+    "accounts/fireworks/models/deepseek-v4-pro": (1.74, 3.48),
+    # Retired catalog generation, kept for replaying old logs.
     "accounts/fireworks/models/llama-v3p1-8b-instruct": (0.20, 0.20),
     "accounts/fireworks/models/gemma2-9b-it": (0.20, 0.20),
     "accounts/fireworks/models/gemma2-27b-it": (0.80, 0.80),

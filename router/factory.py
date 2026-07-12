@@ -19,7 +19,7 @@ from router.providers.base import Transport
 from router.providers.openrouter import OpenRouterProvider
 from router.stage1 import Stage1Deterministic
 from router.stage2 import Stage2Local
-from router.stage3 import M8, Stage3Paid
+from router.stage3 import OSS120, Stage3Paid
 from router.task_log import TaskLogger
 from router.types import Domain
 
@@ -30,7 +30,9 @@ LOCAL_CRITIC_MODEL = "mistral-nemo:12b-instruct"
 def build_pipeline(settings: Settings, transport: Transport | None = None) -> Pipeline:
     ollama = OllamaProvider(host=settings.ollama_host, transport=transport)
     if settings.paid_provider == "fireworks":
-        paid = FireworksProvider(api_key=settings.fireworks_api_key, transport=transport)
+        paid = FireworksProvider(api_key=settings.fireworks_api_key,
+                                 base_url=settings.fireworks_base_url,
+                                 transport=transport)
     else:
         paid = GroqProvider(api_key=settings.groq_api_key, transport=transport)
 
@@ -42,8 +44,11 @@ def build_pipeline(settings: Settings, transport: Transport | None = None) -> Pi
     if use_cloud_fallback:
         # Grading sandbox without a usable GPU: the ultra-cheap paid tier
         # stands in for local inference (see plan/standardized-env-strategy.md).
+        # The stand-in must also respect the harness ALLOWED_MODELS restriction.
+        allowed = settings.allowed_models
+        stage2_model = OSS120 if not allowed or OSS120 in allowed else allowed[0]
         stage2 = Stage2Local(
-            paid, models={d: M8 for d in Domain}, paid=True,
+            paid, models={d: stage2_model for d in Domain}, paid=True,
             factual_k=settings.factual_k, logic_k=settings.logic_k,
             sandbox_timeout=settings.sandbox_timeout_s,
         )
@@ -61,7 +66,8 @@ def build_pipeline(settings: Settings, transport: Transport | None = None) -> Pi
         stage2=stage2,
         stage3=Stage3Paid(paid, cost_tracker=CostTracker(),
                           max_attempts=settings.code_retry_limit + 1,
-                          sandbox_timeout=settings.sandbox_timeout_s),
+                          sandbox_timeout=settings.sandbox_timeout_s,
+                          allowed_models=settings.allowed_models),
         critic=Critic(
             primary_provider=OpenRouterProvider(api_key=settings.openrouter_api_key,
                                                 transport=transport) if settings.openrouter_api_key else ollama,

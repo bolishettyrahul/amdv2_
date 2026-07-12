@@ -2,12 +2,10 @@
 
 from router.cost import CostTracker
 from router.providers.base import ChatResponse, LLMProvider
-from router.stage3 import ESCALATION, ROUTING, Stage3Paid, choose_model, estimate_complexity
+from router.stage3 import (DSV4, ESCALATION, GLM52, KIMI, OSS120, ROUTING,
+                           Stage3Paid, choose_model, estimate_complexity,
+                           resolve_model)
 from router.types import Domain, Task
-
-M8 = "accounts/fireworks/models/llama-v3p1-8b-instruct"
-G9 = "accounts/fireworks/models/gemma2-9b-it"
-L70 = "accounts/fireworks/models/llama-v3p1-70b-instruct"
 
 
 class FakeProvider(LLMProvider):
@@ -23,10 +21,11 @@ class FakeProvider(LLMProvider):
 
 
 def test_routing_matrix_prefers_cheap_models_for_simple_tasks():
-    assert choose_model(Domain.FACTUAL, "simple") == G9
-    assert choose_model(Domain.FACTUAL, "complex") == L70
-    assert choose_model(Domain.SENTIMENT, "simple") == M8
-    assert choose_model(Domain.NER, "complex") == M8  # NER never needs a big model
+    assert choose_model(Domain.FACTUAL, "simple") == OSS120
+    assert choose_model(Domain.FACTUAL, "complex") == KIMI
+    assert choose_model(Domain.SENTIMENT, "simple") == OSS120
+    assert choose_model(Domain.NER, "complex") == OSS120  # NER never needs a big model
+    assert choose_model(Domain.CODE_GEN, "complex") == GLM52
 
 
 def test_complexity_estimation():
@@ -88,3 +87,57 @@ def test_every_domain_and_complexity_has_a_route():
             assert choose_model(domain, complexity) in {
                 m for tiers in ROUTING.values() for m in tiers.values()
             }
+
+
+def test_restrictive_allowed_models_yields_allowed_choice_for_every_domain():
+    """The harness pins ALLOWED_MODELS; routing must never pick a rejected model."""
+    allowed = [OSS120, DSV4]
+    for domain in Domain:
+        for complexity in ("simple", "complex"):
+            model, _ = resolve_model(domain, complexity, allowed)
+            assert model in allowed, f"{domain} {complexity} routed to {model}"
+
+
+def test_allowed_models_fallback_order():
+    # Routed model itself allowed: no change, no flag.
+    assert resolve_model(Domain.FACTUAL, "simple", [OSS120, DSV4]) == (OSS120, False)
+    # Routed (KIMI) not allowed, other tier (OSS120) is: swap tiers, no flag.
+    assert resolve_model(Domain.MATH, "complex", [OSS120, DSV4]) == (OSS120, False)
+    # Neither tier (KIMI/OSS120) allowed, escalation of routed (KIMI -> DSV4) is.
+    assert resolve_model(Domain.MATH, "complex", [DSV4]) == (DSV4, False)
+    # Nothing in ROUTING/ESCALATION for the domain allowed: first allowed model,
+    # flagged as a last-resort fallback so it's visible in results.json.
+    other = "accounts/fireworks/models/some-harness-model"
+    assert resolve_model(Domain.SENTIMENT, "simple", [other]) == (other, True)
+    # Empty allowlist = local dev, anything goes.
+    assert resolve_model(Domain.MATH, "complex", []) == (choose_model(Domain.MATH, "complex"), False)
+
+
+def test_attempt_under_allowlist_only_calls_allowed_models_and_flags_fallback():
+    bad = "```python\ndef add(a, b):\n    return a - b\n```"
+    # CODE_GEN routes OSS120/GLM52, escalations KIMI/DSV4: none of them allowed.
+    unknown = "accounts/fireworks/models/some-harness-model"
+    p = FakeProvider([bad, bad, bad])
+    task = Task("t", "Write add.", metadata={"tests": "assert add(1, 2) == 3"})
+    r = Stage3Paid(p, cost_tracker=CostTracker(), allowed_models=[unknown]).attempt(
+        task, Domain.CODE_GEN)
+    assert all(c["model"] == unknown for c in p.calls)  # incl. the final escalation try
+    assert r.allowed_models_fallback
+    assert r.answer is not None
+
+
+def test_attempt_without_allowlist_does_not_flag_fallback():
+    p = FakeProvider(["Canberra"])
+    r = Stage3Paid(p, cost_tracker=CostTracker()).attempt(
+        Task("t", "Capital of Australia?"), Domain.FACTUAL)
+    assert not r.allowed_models_fallback
+
+
+def test_unpriced_allowed_model_does_not_crash_cost_tracking():
+    unknown = "accounts/fireworks/models/some-harness-model"
+    p = FakeProvider(["Canberra"])
+    r = Stage3Paid(p, cost_tracker=CostTracker(), allowed_models=[unknown]).attempt(
+        Task("t", "Capital of Australia?"), Domain.FACTUAL)
+    assert p.calls[0]["model"] == unknown
+    assert r.answer == "Canberra"
+    assert r.tokens_in > 0  # tokens still counted even with unknown pricing
