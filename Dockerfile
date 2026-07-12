@@ -8,8 +8,25 @@ COPY requirements.txt /app/
 # Install only the core dependencies (lightweight, CPU-only baseline)
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the router source code
-COPY router/ /app/router/
+# Install Ollama and curl/ca-certificates/zstd
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends curl ca-certificates zstd && \
+    curl -fsSL https://ollama.com/install.sh | sh && \
+    curl -L https://ollama.com/download/ollama-linux-amd64-rocm.tar.zst -o /tmp/ollama-rocm.tar.zst && \
+    tar -C /usr/local -xf /tmp/ollama-rocm.tar.zst && \
+    rm -rf /tmp/ollama-rocm.tar.zst /var/lib/apt/lists/*
 
-# Set the default entrypoint to run the router main module with arguments passed through
-ENTRYPOINT ["python", "-m", "router.main"]
+# Pull Ollama model during the build process (only llama3.2:3b for consolidated Option B)
+RUN ollama serve & \
+    sleep 5 && \
+    ollama pull llama3.2:3b
+
+# Copy the router source code and helper scripts
+COPY router/ /app/router/
+COPY scripts/ /app/scripts/
+
+# Make the entrypoint script executable
+RUN chmod +x /app/scripts/entrypoint.sh
+
+# Set the default entrypoint to run the entrypoint script
+ENTRYPOINT ["/bin/bash", "/app/scripts/entrypoint.sh"]

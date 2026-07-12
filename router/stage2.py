@@ -14,14 +14,14 @@ from router.types import Domain, StageResult, Task
 STAGE = "stage2_local"
 
 DEFAULT_MODELS: dict[Domain, str] = {
-    Domain.FACTUAL: "qwen2.5:7b",
-    Domain.MATH: "qwen2.5:7b",
-    Domain.SENTIMENT: "phi3.5:3.8b",
+    Domain.FACTUAL: "llama3.2:3b",
+    Domain.MATH: "llama3.2:3b",
+    Domain.SENTIMENT: "llama3.2:3b",
     Domain.SUMMARIZATION: "llama3.2:3b",
-    Domain.NER: "qwen2.5:7b",
-    Domain.CODE_DEBUG: "qwen2.5:7b",
-    Domain.LOGIC: "qwen2.5:7b",
-    Domain.CODE_GEN: "qwen2.5:7b",
+    Domain.NER: "llama3.2:3b",
+    Domain.CODE_DEBUG: "llama3.2:3b",
+    Domain.LOGIC: "llama3.2:3b",
+    Domain.CODE_GEN: "llama3.2:3b",
 }
 
 _PROMPTS: dict[Domain, str] = {

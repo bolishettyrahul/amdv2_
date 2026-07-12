@@ -20,7 +20,9 @@ docker build -t amd-router .
 
 ### Local GPU / AMD ROCm Passthrough
 
-To allow the container to access AMD ROCm GPU resources (e.g. for communicating with a GPU-backed local service or verifying hardware contexts), pass the device mapping and video/render groups at run-time.
+### Local GPU / AMD ROCm Passthrough
+
+To allow the container's own bundled Ollama service to access AMD ROCm GPU resources for accelerated hardware execution, pass the device mapping and video/render groups at run-time.
 
 > [!WARNING]
 > Do **NOT** use `--gpus all`. This flag is NVIDIA-specific and will silently fail or do nothing on AMD systems.
@@ -30,12 +32,6 @@ Instead, use:
 * `--device=/dev/dri`
 * `--group-add video`
 * `--group-add render`
-
-### Connecting to Ollama on the Host
-
-Because local Ollama runs on the host (not inside the container), you must set the `OLLAMA_HOST` environment variable to point to the host's IP address:
-* **Linux**: Typically `http://172.17.0.1:11434` or use `--network=host` (if host networking is preferred).
-* **Windows / macOS**: `http://host.docker.internal:11434`
 
 ### Full Example Command
 
@@ -50,7 +46,6 @@ docker run --rm \
   -e FIREWORKS_API_KEY="your-fireworks-api-key" \
   -e GROQ_API_KEY="your-groq-api-key" \
   -e OPENROUTER_API_KEY="your-openrouter-api-key" \
-  -e OLLAMA_HOST="http://host.docker.internal:11434" \
   amd-router --input /data/dataset.jsonl --output /data/results.jsonl
 ```
 
