@@ -55,3 +55,19 @@ fixtures/test_*.jsonl
 
 # Git worktrees directory
 .trees/
+
+# Claude CLI cache/history
+.claude/
+
+# Pytest cache
+.pytest_cache/
+
+# Testing and coverage cache/reports
+.mypy_cache/
+.coverage
+.coverage.*
+.cache/
+htmlcov/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
