@@ -44,3 +44,14 @@ pythonfiles/
 # System files
 .DS_Store
 Thumbs.db
+
+# Local environment and keys
+.env
+.env.*
+
+# Local test logs
+logs/
+fixtures/test_*.jsonl
+
+# Git worktrees directory
+.trees/

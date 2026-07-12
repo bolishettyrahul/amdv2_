@@ -19,6 +19,7 @@ PRICE_TABLE: dict[str, tuple[float, float]] = {
     "accounts/fireworks/models/llama-v3p1-70b-instruct": (0.90, 0.90),
     "accounts/fireworks/models/qwen2p5-72b-instruct": (0.90, 0.90),
     "accounts/fireworks/models/llama-v3p1-405b-instruct": (4.00, 4.00),
+    "accounts/fireworks/models/llama4-maverick-instruct-basic": (0.22, 0.88),
 }
 
 _FREE_PREFIXES = ("ollama/",)

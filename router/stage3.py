@@ -24,6 +24,7 @@ G27 = "accounts/fireworks/models/gemma2-27b-it"
 L70 = "accounts/fireworks/models/llama-v3p1-70b-instruct"
 Q72 = "accounts/fireworks/models/qwen2p5-72b-instruct"
 L405 = "accounts/fireworks/models/llama-v3p1-405b-instruct"
+MAVERICK = "accounts/fireworks/models/llama4-maverick-instruct-basic"
 
 ROUTING: dict[Domain, dict[str, str]] = {
     Domain.FACTUAL: {"simple": G9, "complex": L70},
@@ -37,8 +38,9 @@ ROUTING: dict[Domain, dict[str, str]] = {
 }
 
 # Self-correction escalation ladder: where to go when the routed model keeps
-# failing the verification gate.
-ESCALATION: dict[str, str] = {M8: L70, G9: L70, G27: L70, Q72: L405, L70: L405, L405: L405}
+# failing the verification gate. Use the highly cost-effective 400B MAVERICK
+# model instead of the expensive L405.
+ESCALATION: dict[str, str] = {M8: L70, G9: L70, G27: L70, Q72: MAVERICK, L70: MAVERICK, L405: MAVERICK, MAVERICK: MAVERICK}
 
 _COMPLEX_CUES = re.compile(
     r"\bprove\b|\bproof\b|\bcompare\b|\bmulti-?hop\b|\bconcurrenc|\bthread|\barchitect"

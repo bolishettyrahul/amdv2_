@@ -64,8 +64,8 @@ def build_pipeline(settings: Settings, transport: Transport | None = None) -> Pi
                           sandbox_timeout=settings.sandbox_timeout_s),
         critic=Critic(
             primary_provider=OpenRouterProvider(api_key=settings.openrouter_api_key,
-                                                transport=transport),
-            primary_model=OPENROUTER_CRITIC_MODEL,
+                                                transport=transport) if settings.openrouter_api_key else ollama,
+            primary_model=OPENROUTER_CRITIC_MODEL if settings.openrouter_api_key else LOCAL_CRITIC_MODEL,
             fallback_provider=ollama,
             fallback_model=LOCAL_CRITIC_MODEL,
         ),
