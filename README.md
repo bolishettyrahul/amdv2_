@@ -124,7 +124,26 @@ export TASK_LOG_PATH="logs/tasks.jsonl"
 ```
 
 ### Running Tests
-To run the full validation test suite (110+ tests):
+To run the full validation test suite (120 tests):
 ```bash
-pytest
+python -m pytest
 ```
+
+### Running the CLI Agent (Bare-Metal)
+You can run the routing agent directly over any dataset in JSONL or CSV format:
+```bash
+python -m router.main --input <path_to_dataset> --output <path_to_results.jsonl>
+```
+* **Example**:
+  ```bash
+  python -m router.main --input fixtures/sample_tasks.jsonl --output logs/results.jsonl
+  ```
+
+### Running the Offline Routing Evaluator
+To run a parameter sweep across all routing thresholds and logic gates to determine the Pareto frontier (Accuracy vs. Cost):
+```bash
+python scripts/evaluate_routing.py
+```
+
+### Running with Docker
+For instructions on building the container image and running with GPU/ROCm passthrough, see the [RUNNING.md](file:///c:/Users/Rama%20Bolishetty/OneDrive/Desktop/amd_v2/RUNNING.md) guide.

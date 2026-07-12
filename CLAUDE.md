@@ -4,14 +4,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-This repository is pre-implementation: it currently contains only planning documents (`plan/`) and an
-empty Python 3.13 virtual environment (`.venv/`). There is no source code, dependency manifest, build
-system, lint config, or test suite yet. When asked to build things here, you are implementing the plan
-from scratch — check `plan/master-plan.md` for the current build order/status before assuming any module
-exists.
+This repository contains the fully implemented Phase 1 cascade routing pipeline and testing harness. It is no longer pre-implementation. There is a complete test suite of 120 tests and command-line execution entrypoints.
 
-Do not invent build/lint/test commands in this file until a real toolchain (e.g. `pyproject.toml`,
-`requirements.txt`, a test runner) exists in the repo — add them here once they're established.
+## Build, Test & Run Commands
+
+* **Activate Virtual Environment**:
+  * Windows PowerShell: `.venv\Scripts\Activate.ps1`
+  * Command Prompt: `.venv\Scripts\activate.bat`
+* **Install Dependencies**: `pip install -r requirements.txt` (and optionally `-r requirements-optional.txt`)
+* **Run Unit Tests**: `python -m pytest`
+* **Run Batch Routing CLI**: `python -m router.main --input <path_to_input> --output <path_to_output>`
+* **Run Offline Routing Evaluator**: `python scripts/evaluate_routing.py`
+* **Run GPU/Ollama Health Check**: `python scripts/health_check.py`
 
 ## What this project is
 
