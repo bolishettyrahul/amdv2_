@@ -1,5 +1,5 @@
 #!/bin/bash
-# Harness contract: this script must NEVER exit nonzero because of Ollama.
+# Harness contract: this script must NEVER exit nonzero because of Ollama. (Trigger Build)
 # The pipeline's startup health check (router/health.py) flips Stage 2 to the
 # cheap cloud fallback whenever local inference is unavailable, so every
 # Ollama problem here is survivable — warn and keep going.
