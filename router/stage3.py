@@ -116,12 +116,37 @@ class Stage3Paid:
         self.max_attempts = max_attempts
         self.sandbox_timeout = sandbox_timeout
         self.allowed_models = list(allowed_models or [])
+        # Models that 404'd this batch (the harness allowlist is known to carry
+        # undeployed IDs); never retried once marked.
+        self._unavailable: set[str] = set()
 
     def _escalation_target(self, model: str) -> str:
         target = ESCALATION.get(model, model)
         if self.allowed_models and target not in self.allowed_models:
             return model  # stronger model not allowed: stay on the allowed one
         return target
+
+    _DEAD_STATUSES = (400, 404)
+
+    def _chat_failover(self, messages: list[dict], preferred: str):
+        """chat() on `preferred`, falling through its escalation target and the
+        rest of the allowlist when a model errors. A 404/400 marks the model
+        dead for the whole batch; transient failures only skip it this call."""
+        seen: set[str] = set()
+        candidates = [m for m in
+                      [preferred, self._escalation_target(preferred), *self.allowed_models]
+                      if m and not (m in seen or seen.add(m))]
+        last_exc: Exception | None = None
+        for model in candidates:
+            if model in self._unavailable:
+                continue
+            try:
+                return self.provider.chat(messages, model=model, temperature=0.0)
+            except Exception as exc:
+                last_exc = exc
+                if getattr(exc, "status", None) in self._DEAD_STATUSES:
+                    self._unavailable.add(model)
+        raise last_exc if last_exc is not None else RuntimeError("no model available")
 
     def attempt(self, task: Task, domain: Domain) -> StageResult:
         routed, allowed_fallback = resolve_model(
@@ -139,7 +164,8 @@ class Stage3Paid:
         for attempt_idx in range(self.max_attempts):
             if attempt_idx == self.max_attempts - 1:
                 model = self._escalation_target(routed)  # last try: stronger model
-            resp = self.provider.chat(messages, model=model, temperature=0.0)
+            resp = self._chat_failover(messages, model)
+            model = resp.model  # the model that actually answered, post-failover
             tokens_in += resp.tokens_in
             tokens_out += resp.tokens_out
             try:

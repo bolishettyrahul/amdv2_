@@ -35,6 +35,95 @@ def test_complexity_estimation():
     assert estimate_complexity(Task("t", long_prompt), Domain.SUMMARIZATION) == "complex"
 
 
+class DeadModelProvider(LLMProvider):
+    """404s for models in `dead`, answers from any other model."""
+
+    name = "fireworks"
+
+    def __init__(self, dead, text="Paris."):
+        self.dead = set(dead)
+        self.text = text
+        self.calls = []
+
+    def chat(self, messages, model, temperature=0.0, max_tokens=None):
+        self.calls.append(model)
+        if model in self.dead:
+            from router.providers.base import ProviderError
+            err = ProviderError(f"fireworks chat failed: HTTP 404 model not found: {model}")
+            err.status = 404
+            raise err
+        return ChatResponse(self.text, tokens_in=10, tokens_out=5, model=model)
+
+
+def test_dead_allowed_model_fails_over_to_next_allowed():
+    # The real judging list shape: first allowed model is not deployed.
+    allowed = ["dead-model", "live-model"]
+    p = DeadModelProvider(dead=["dead-model"])
+    s3 = Stage3Paid(p, cost_tracker=CostTracker(), allowed_models=allowed)
+    r = s3.attempt(Task("t", "What is the capital of France?"), Domain.FACTUAL)
+    assert r.answer == "Paris."
+    assert r.model == "live-model"
+
+
+def test_404_model_is_blacklisted_for_subsequent_tasks():
+    allowed = ["dead-model", "live-model"]
+    p = DeadModelProvider(dead=["dead-model"])
+    s3 = Stage3Paid(p, cost_tracker=CostTracker(), allowed_models=allowed)
+    s3.attempt(Task("t1", "What is the capital of France?"), Domain.FACTUAL)
+    s3.attempt(Task("t2", "What is the capital of Peru?"), Domain.FACTUAL)
+    # The dead model is tried at most once across the whole batch.
+    assert p.calls.count("dead-model") == 1
+
+
+def test_all_models_dead_raises_so_pipeline_reports_stage_error():
+    import pytest
+
+    p = DeadModelProvider(dead=["a", "b"])
+    s3 = Stage3Paid(p, cost_tracker=CostTracker(), allowed_models=["a", "b"])
+    with pytest.raises(Exception):
+        s3.attempt(Task("t", "capital?"), Domain.FACTUAL)
+
+
+def test_transient_error_fails_over_without_blacklisting():
+    class FlakyProvider(LLMProvider):
+        name = "fireworks"
+
+        def __init__(self):
+            self.calls = []
+
+        def chat(self, messages, model, temperature=0.0, max_tokens=None):
+            self.calls.append(model)
+            if model == "flaky-model" and self.calls.count("flaky-model") == 1:
+                from router.providers.base import ProviderError
+                raise ProviderError("fireworks chat failed after retries: HTTP 503")
+            return ChatResponse("Paris.", tokens_in=10, tokens_out=5, model=model)
+
+    p = FlakyProvider()
+    s3 = Stage3Paid(p, cost_tracker=CostTracker(),
+                    allowed_models=["flaky-model", "backup-model"])
+    r1 = s3.attempt(Task("t1", "capital?"), Domain.FACTUAL)
+    assert r1.answer == "Paris."
+    # Next task tries the preferred model again: a 503 is not a dead model.
+    s3.attempt(Task("t2", "capital?"), Domain.FACTUAL)
+    assert p.calls.count("flaky-model") == 2
+
+
+def test_provider_error_carries_http_status():
+    from router.providers.base import OpenAICompatProvider, ProviderError
+
+    class P(OpenAICompatProvider):
+        base_url = "http://x"
+        name = "fireworks"
+
+    def transport_404(url, headers, payload):
+        return 404, {"error": "Model not found"}
+
+    import pytest
+    with pytest.raises(ProviderError) as exc_info:
+        P(transport=transport_404).chat([{"role": "user", "content": "hi"}], model="m")
+    assert exc_info.value.status == 404
+
+
 def test_verified_first_try_single_call():
     p = FakeProvider(["```python\ndef add(a, b):\n    return a + b\n```"])
     tracker = CostTracker()

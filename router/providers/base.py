@@ -12,7 +12,12 @@ Transport = Callable[[str, dict, dict], tuple[int, dict]]
 
 
 class ProviderError(RuntimeError):
-    pass
+    """`status` carries the final HTTP status (None for non-HTTP failures),
+    so callers can tell a dead model (404) from a transient outage."""
+
+    def __init__(self, message: str, status: int | None = None):
+        super().__init__(message)
+        self.status = status
 
 
 @dataclass(frozen=True)
@@ -85,17 +90,20 @@ class OpenAICompatProvider(LLMProvider):
 
         url = f"{self.base_url}/chat/completions"
         last_error = ""
+        last_status: int | None = None
         for attempt in range(self.max_retries):
             status, body = self.transport(url, headers, payload)
             if status == 200:
                 return self._parse(body, messages, model)
             last_error = f"HTTP {status}: {body}"
+            last_status = status
             if status in (408, 429) or status >= 500:
                 if attempt < self.max_retries - 1:
                     time.sleep(self.retry_delay * (2**attempt))
                 continue
             break  # non-retryable client error
-        raise ProviderError(f"{self.name} chat failed after retries: {last_error}")
+        raise ProviderError(f"{self.name} chat failed after retries: {last_error}",
+                            status=last_status)
 
     def _parse(self, body: dict, messages: list[dict], model: str) -> ChatResponse:
         try:
